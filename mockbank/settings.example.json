@@ -1,0 +1,14 @@
+{
+  "consent_validity_days": 90,
+  "one_off_consent_validity_minutes": 60,
+  "max_consent_requests_per_day": 4,
+  "consent_setup_timeout_hours": 24,
+  "payment_approval_timeout_minutes": 15,
+  "token_validity_minutes": 60,
+  "account_identifier": "IBAN",
+  "supported_payment_products": ["domestic"],
+  "supported_booking_statuses": ["booked", "pending", "both"],
+  "with_balance_supported": false,
+  "combined_service_indicator_supported": false,
+  "auto_approve": false
+}
