@@ -28,19 +28,19 @@ Everything here is made up. Never use real data.
 | **Pending** | A transaction the bank has seen but not finished. It can still change. |
 | **IBAN** | The account number. |
 
-## 2. Status: step 3 of 6
+## 2. Status: step 4 of 6
 
 | Step | What | State |
 |---|---|---|
 | 1 | Read the standard | Done |
 | 2 | Skeleton: sample data, settings, faults, clock, errors, admin controls | Done |
-| 3 | Consent, approval page, token | **Done** |
-| 4 | Accounts, balances, transactions | Not built yet |
+| 3 | Consent, approval page, token | Done |
+| 4 | Accounts, balances, transactions | **Done** |
 | 5 | Payments | Not built yet |
 | 6 | Check against the standard, full test run | Not built yet |
 
-**Today the mock can give an app a valid access token, but there is nothing to
-read with it yet.** The account and payment files are still empty placeholders.
+**Today an app can ask for consent, get a token and read accounts, balances and
+transactions.** Payments are still an empty placeholder.
 
 ## 3. Run it
 
@@ -54,7 +54,7 @@ uv run uvicorn app.main:app --reload
 
 - http://127.0.0.1:8000/docs lists every call and lets you try it.
 - http://127.0.0.1:8000/health answers `{"status": "ok"}` if the mock is up.
-- `uv run pytest` runs the tests (62 today).
+- `uv run pytest` runs the tests (84 today).
 
 The mock keeps everything in memory. Stop it and it forgets everything.
 
@@ -113,7 +113,7 @@ A `validUntil` too far ahead is not refused. It is cut back to 90 days, and
 
 **About "4 a day".** The setting `max_consent_requests_per_day` is the most
 reads per day an app may ask for (`frequencyPerDay`). Step 3 only checks that
-the number is allowed. Step 4 will refuse the 5th read of the day with `429`.
+the number is allowed. Step 4 refuses the 5th read of the day with `429` (see 5.4).
 
 ### 4.2 The customer approves
 
@@ -135,7 +135,7 @@ Afterwards the customer is sent back to the app's `TPP-Redirect-URI`:
 - approved: `...?code=<one-time code>&consentId=<id>`
 - rejected: `...?error=access_denied&consentId=<id>`
 
-For automated tests, set `auto_approve` to true (see 5.2). Opening the link then
+For automated tests, set `auto_approve` to true (see 6.2). Opening the link then
 approves at once, with no screens, and still sends the customer back with a code.
 
 ### 4.3 Get a token
@@ -183,9 +183,9 @@ Statuses: `received` → `valid` → `expired`, or `rejected`, or `terminatedByT
 | One-off consent | Valid for 60 minutes after approval (`one_off_consent_validity_minutes`) |
 
 The mock has no background timer. A consent's status is brought up to date
-each time someone asks. Use the mock clock (5.4) to test expiry.
+each time someone asks. Use the mock clock (6.4) to test expiry.
 
-### 4.6 The access check (ready for steps 4 and 5)
+### 4.6 The access check (used by accounts, and later payments)
 
 Every account or payment call will need two headers:
 
@@ -205,11 +205,92 @@ Consent-ID: <consent id>
 | Consent ended (deleted, rejected, not approved) | 401 `CONSENT_INVALID` |
 | Consent ran out | 401 `CONSENT_EXPIRED` |
 
-It is built and tested, but no real call uses it yet.
+The account calls use it now (see 5). The payment calls will use it in step 5.
 
-## 5. What else works
+## 5. Reading accounts (step 4)
 
-### 5.1 Sample data
+With a token and a consent, the app can read. Every call here needs three headers:
+
+```
+Authorization: Bearer <access token>
+Consent-ID: <consent id>
+X-Request-ID: <any UUID>
+```
+
+### 5.1 The five calls
+
+| Call | What it returns |
+|---|---|
+| `GET /v1/accounts` | The accounts the customer shared (an empty list is a normal `200`) |
+| `GET /v1/accounts/{id}` | One account: IBAN, currency, name, owner, product, type, status |
+| `GET /v1/accounts/{id}/balances` | `interimBooked` (final transactions only) and `interimAvailable` (also counting pending) |
+| `GET /v1/accounts/{id}/transactions` | Transactions, newest first (see 5.2) |
+| `GET /v1/accounts/{id}/transactions/{transactionId}` | One transaction |
+
+Amounts are text with two decimals, like `"12.30"`. Money out has a minus sign
+and shows the other side as `creditorName` / `creditorAccount`. Money in shows
+`debtorName` / `debtorAccount`. Only the JSON format is built, not the
+standard's XML format.
+
+### 5.2 Asking for transactions
+
+| Query | Meaning |
+|---|---|
+| `bookingStatus` (required) | `booked` (final), `pending` (not final yet) or `both` |
+| `dateFrom` (required) | First day, like `2026-11-01` |
+| `dateTo` (optional) | Last day, included |
+
+- A booked transaction is matched on its booking date. A pending one is matched
+  on its value date, because it has no booking date yet.
+- `all` and `information` are valid in the standard but not supported here:
+  `400 PARAMETER_NOT_SUPPORTED`. So are `deltaList` and `entryReferenceFrom`.
+- `dateFrom` after `dateTo` gives `400 PERIOD_INVALID`.
+- There is no paging. The accounts are small, so everything comes back at once.
+- `withBalance=true` is refused with `400 PARAMETER_NOT_SUPPORTED`, unless you
+  switch on the setting `with_balance_supported`. Then balances are added.
+
+### 5.3 What the app may see
+
+Two things must both be true for an account:
+
+1. The customer **shared** it when approving.
+2. The app **asked for** that kind of access when creating the consent.
+
+| Case | Answer |
+|---|---|
+| Account not shared, belongs to someone else, or does not exist | `404 RESOURCE_UNKNOWN` (all three look the same, so an app cannot learn what else the bank has) |
+| Consent did not ask for balances (or transactions) of this account | `401 CONSENT_INVALID` |
+| Consent only said `allAccounts` | The account list and details work, but balances and transactions give `401 CONSENT_INVALID` |
+
+The links inside an account only point to what the consent allows.
+
+### 5.4 Reads per day
+
+Every account call is one "read". A consent allows `frequencyPerDay` reads a day
+(never more than 4 unless you change the setting). The next one gets
+`429 ACCESS_EXCEEDED`.
+
+- A day is a calendar day on the mock clock (UTC). Move the clock to start a new day.
+- A call that fails the token or consent check is not counted. A refused read is not counted either.
+- The limit belongs to the consent. Two consents have two separate counts.
+- A one-off consent has `frequencyPerDay` 1, so it allows one read.
+- Not modelled: the standard treats a call made with the customer present
+  (`PSU-IP-Address` sent) differently. Here every call counts.
+
+### 5.5 Order of checks
+
+1. a "before" fault, if one is on
+2. token and consent are valid and belong together
+3. within the daily limit
+4. the account exists and was shared
+5. the consent allows this kind of access
+6. the query is valid
+
+Then the answer is built, and an "after" fault, if one is on, runs last.
+
+## 6. What else works
+
+### 6.1 Sample data
 
 Built fresh at every start (and on reset). The numbers are the same every
 time, so tests can rely on them.
@@ -221,6 +302,7 @@ time, so tests can rely on them.
 | Transactions | 70 in total, 8 of them pending |
 | IBANs | Look real: `GE`, two check digits, `MB`, 16 digits. They pass the standard IBAN check. |
 | Balances | No account starts overdrawn. |
+| Money in | Current accounts get a regular salary payment, so there is money coming in as well as out. |
 
 Each account reports two balances, as the standard does:
 
@@ -229,7 +311,7 @@ Each account reports two balances, as the standard does:
 
 See all of it at `GET /admin/data`, including the IBANs you will need.
 
-### 5.2 Settings (the bank's rules)
+### 6.2 Settings (the bank's rules)
 
 The Georgian rules are not hard-coded. They are settings, so you can change
 them and test how your app reacts. Each one is labelled with how far we trust
@@ -264,7 +346,7 @@ Two ways to change them:
 
 Unknown setting names and impossible values (such as 0 days) are rejected.
 
-### 5.3 Faults (making the bank misbehave)
+### 6.3 Faults (making the bank misbehave)
 
 Real banks are slow and fail. Switch on a fault and the mock does the same.
 
@@ -303,13 +385,13 @@ POST /admin/faults
  "phase": "after", "times": 1, "status_code": 503}
 ```
 
-### 5.4 Clock
+### 6.4 Clock
 
 `POST /admin/time/advance` with `{"minutes": 90}` moves the bank's clock
 forward. Use it to see what your app does when a token or consent has
 expired, without waiting. Reset puts the clock back to real time.
 
-### 5.5 Errors
+### 6.5 Errors
 
 Errors on the standard's calls follow the standard:
 
@@ -328,13 +410,13 @@ Errors on the standard's calls follow the standard:
 
 Not yet checked: 408 and 415 codes, which we have not seen in the standard.
 
-### 5.6 Reset
+### 6.6 Reset
 
 `POST /admin/reset` gives you fresh data, starting settings, no faults and the
 real clock. It also forgets all consents and tokens. Call it at the start of
 every test.
 
-## 6. Admin controls
+## 7. Admin controls
 
 These are ours, not part of the standard. **They have no password. Never put
 this mock on a public server.**
@@ -351,7 +433,7 @@ this mock on a public server.**
 | `GET /admin/data` | See customers (with fake sign-ins), accounts, IBANs, balances |
 | `POST /admin/reset` | Start over |
 
-## 7. Look and feel
+## 8. Look and feel
 
 The approval pages use the project's brand colours: bubblegum pink `#FD6AD2`,
 galactic violet `#553EFE`, sky blue `#7CC4F5` and marshmallow white `#F0F0F0`,
@@ -359,15 +441,24 @@ on a soft pink-and-violet glow. They carry a "Test bank" badge and a line that
 nothing is real. All colours live in one file, `app/brand.py`, so changing the
 look means editing that file only.
 
-## 8. What comes next
+## 9. What comes next
 
 | Step | Calls |
 |---|---|
-| 4 Accounts | List accounts, one account, balances, transactions (booked, pending or both), one transaction. They will use the access check from 4.6 and refuse the 5th read of the day. |
 | 5 Payments | Start a domestic payment, read it, check its status, cancel it, approve it. |
 | 6 Check | Compare against the standard and run a whole flow from consent to payment. |
 
-## 9. Where things are
+**Guesses to check against the standard in step 6.** These are our reading of
+the standard, not confirmed rules:
+
+- A single transaction is wrapped as `transactionsDetails`.
+- An account that was not shared answers `404 RESOURCE_UNKNOWN` (not 403).
+- The account list is lenient: an account shows if the app named it in any part of the consent.
+- `dateFrom` after `dateTo` gives `PERIOD_INVALID`.
+- An unknown IBAN in a consent request gives `RESOURCE_UNKNOWN`, and an unknown consent id gives `403 CONSENT_UNKNOWN`.
+- A pending transaction is matched on its value date.
+
+## 10. Where things are
 
 | File | What it does |
 |---|---|
@@ -376,10 +467,10 @@ look means editing that file only.
 | `app/routers/bank_pages.py` | The sign-in and approval pages (working) |
 | `app/routers/oauth.py` | The token step (working) |
 | `app/routers/admin.py` | The admin controls (working) |
-| `app/routers/accounts.py` | Account calls (placeholder) |
+| `app/routers/accounts.py` | The account calls (working) |
 | `app/routers/payments.py` | Payment calls (placeholder) |
-| `app/consent_rules.py` | A consent's life: expiry, approving, rejecting |
-| `app/auth.py` | The access check: token plus consent |
+| `app/consent_rules.py` | A consent's life (expiry, approving, rejecting), what it allows, the daily read limit |
+| `app/auth.py` | The access check (token plus consent) and the daily read count |
 | `app/brand.py` | Colours and layout of the pages |
 | `app/formdata.py` | Reads web forms (so we need no extra package) |
 | `app/models.py` | The shapes of the data: customer, account, transaction, consent, token, payment |
@@ -393,7 +484,7 @@ look means editing that file only.
 | `settings.example.json` | Starting rules to copy and edit |
 | `requirements.txt` | Packages, if you do not use `uv` |
 
-## 10. Not planned
+## 11. Not planned
 
 Foreign, bulk and recurring payments, card accounts, real certificates and
 request signing, and any screen beyond the approval pages.

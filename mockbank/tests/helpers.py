@@ -78,3 +78,22 @@ def advance(client, **kwargs):
     """Move the mock clock forward, e.g. advance(client, minutes=90)."""
     minutes = kwargs.get("minutes", 0) + kwargs.get("hours", 0) * 60 + kwargs.get("days", 0) * 1440
     assert client.post("/admin/time/advance", json={"minutes": minutes}).status_code == 200
+
+
+def connect(client, customer_id="c1", account_ids=None, reads=50, **consent_changes):
+    """The whole journey in one go, for the account tests.
+
+    Creates a consent, approves it, swaps the code for a token, and returns the
+    headers an app would send on every account call, plus the consent id.
+    `reads` is how many reads a day the consent allows (50 so most tests never hit the limit).
+    """
+    if reads > 4:   # the bank's daily limit is a setting, so raise it for this consent
+        client.put("/admin/settings", json={"max_consent_requests_per_day": reads})
+    changes = {"frequencyPerDay": reads, **consent_changes}
+    created = create_consent(client, customer_id, **changes)
+    assert created.status_code == 201, created.text
+    code = code_from(approve(client, created, customer_id, account_ids))
+    token = client.post("/oauth/token", data={"grant_type": "authorization_code", "code": code}).json()
+    consent_id = created.json()["consentId"]
+    return {"Authorization": f"Bearer {token['access_token']}", "Consent-ID": consent_id,
+            "X-Request-ID": str(uuid.uuid4())}, token

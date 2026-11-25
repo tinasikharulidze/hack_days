@@ -12,10 +12,10 @@ Step 3 builds and tests this check. Steps 4 and 5 put it on their routes with
     consent: Consent = Depends(require_access)
 """
 
-from fastapi import Header
+from fastapi import Depends, Header
 
 from app import clock, store
-from app.consent_rules import refresh
+from app.consent_rules import count_read, refresh
 from app.errors import BankError
 from app.models import Consent
 
@@ -49,4 +49,15 @@ def require_access(
         raise BankError(401, "CONSENT_EXPIRED", "The consent has expired.")
     if consent.status != "valid":
         raise BankError(401, "CONSENT_INVALID", f"The consent is not valid (status: {consent.status}).")
+    return consent
+
+
+def require_read(consent: Consent = Depends(require_access)) -> Consent:
+    """require_access, plus: this call counts as one of the consent's daily reads.
+
+    Used by the account calls. (Payments are not "reads", so they use
+    require_access only.) The 429 comes after the token and consent checks,
+    so a call that fails them is never counted.
+    """
+    count_read(consent)
     return consent

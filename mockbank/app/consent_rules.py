@@ -95,3 +95,39 @@ def referenced_ibans(consent: Consent) -> set[str]:
         for reference in consent.access.get(section) or []:
             ibans.add(reference["iban"])
     return ibans
+
+
+def may(consent: Consent, account, permission: str) -> bool:
+    """May this consent use `permission` on this account?
+
+    permission is "accounts" (list and details), "balances" or "transactions".
+    Two things must both be true:
+      1. the customer shared this account when approving, and
+      2. the app asked for this kind of access to it when creating the consent.
+
+    "accounts" is lenient: an account counts as visible if the app asked about
+    it in any section, or asked for "allAccounts". Balances and transactions
+    are strict: the IBAN must be in that very section. (A consent that only
+    says "allAccounts" therefore lists accounts but cannot read balances.)
+    """
+    if account.resource_id not in consent.granted_account_ids:
+        return False
+    access = consent.access
+    asked = {ref["iban"] for ref in access.get(permission) or []}
+    if permission == "accounts":
+        return bool(access.get("availableAccounts")) or account.iban in referenced_ibans(consent)
+    return account.iban in asked
+
+
+def count_read(consent: Consent) -> None:
+    """Count one data read for today, or refuse with 429 if the daily limit is used up.
+
+    The limit is the consent's frequencyPerDay (never above max_consent_requests_per_day).
+    "Today" is the mock clock's date (UTC). Refused calls are not counted.
+    """
+    today = clock.now().date().isoformat()
+    used = consent.reads_by_day.get(today, 0)
+    if used >= consent.frequency_per_day:
+        raise BankError(429, "ACCESS_EXCEEDED",
+                        f"This consent allows {consent.frequency_per_day} reads a day. Try again tomorrow.")
+    consent.reads_by_day[today] = used + 1

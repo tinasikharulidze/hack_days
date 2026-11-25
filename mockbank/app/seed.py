@@ -69,6 +69,10 @@ def _transactions_for(account: Account, count: int, rng: random.Random) -> list[
     transactions = []
     for index, offset in enumerate(day_offsets):
         name, description, direction, low, high = rng.choice(patterns)
+        # A real current account receives a salary now and then. Pure chance left some
+        # accounts with no money coming in at all, so every 8th transaction is a salary.
+        if account.cash_account_type != "SVGS" and index % 8 == 3:
+            name, description, direction, low, high = CURRENT_PATTERNS[0]
         is_pending = account.cash_account_type != "SVGS" and index < 2
         day = today - timedelta(days=offset)
         transactions.append(
