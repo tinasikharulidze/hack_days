@@ -34,6 +34,7 @@ OPERATIONS = (
     "accounts.list", "accounts.details", "accounts.balances",
     "accounts.transactions", "accounts.transaction",
     "payments.initiate", "payments.get", "payments.status", "payments.cancel", "payments.authorise",
+    "oauth.token",   # the token step (not part of the standard, see routers/oauth.py)
 )
 
 
@@ -143,8 +144,9 @@ def _code_for(status_code: int, operation: str) -> str | None:
 
     The standard defines no codes for 500 and 503, so those answers have no
     body. A 429 has the code ACCESS_EXCEEDED on account calls only; on
-    payment calls it has no body either.
+    payment calls it has no body either. The token step is not part of the
+    standard, so it gets no body for 429 as well.
     """
-    if status_code == 429 and not operation.startswith("payments."):
+    if status_code == 429 and not operation.startswith("payments.") and operation != "oauth.token":
         return "ACCESS_EXCEEDED"
     return None

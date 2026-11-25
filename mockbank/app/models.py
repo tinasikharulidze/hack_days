@@ -14,6 +14,9 @@ class Customer:
     """A person who owns accounts at the bank (the standard calls them the PSU)."""
     id: str
     name: str
+    # Fake sign-in used on the mock bank's approval page (step 3). Test values only.
+    username: str = ""
+    password: str = ""
 
 
 @dataclass
@@ -56,18 +59,28 @@ class Consent:
     combined_service_indicator: bool = False
     tpp_redirect_uri: str | None = None           # where to send the customer after approval
     customer_id: str | None = None                # known once the customer approves
+    granted_account_ids: list[str] = field(default_factory=list)  # accounts the customer shared
     created_at: datetime | None = None
+    last_action: datetime | None = None           # last time the status changed
     expires_at: datetime | None = None            # set when the customer approves
     reads_by_day: dict[str, int] = field(default_factory=dict)  # date text -> number of reads
 
 
 @dataclass
 class Token:
-    """An access token issued when the customer approves a consent (step 3)."""
+    """An access token: the short-lived key an app shows with every call (step 3)."""
     access_token: str
     consent_id: str
     customer_id: str
     expires_at: datetime
+
+
+@dataclass
+class RefreshToken:
+    """A longer-lived key an app swaps for a new access token. It lasts as long as its consent."""
+    refresh_token: str
+    consent_id: str
+    customer_id: str
 
 
 @dataclass
@@ -76,8 +89,18 @@ class Authorisation:
     authorisation_id: str
     kind: str                 # "consent" or "payment"
     resource_id: str          # the consent id or payment id it belongs to
-    status: str = "received"  # received, finalised, failed
+    # The standard's scaStatus values we use:
+    #   received          = waiting for the customer
+    #   psuAuthenticated  = customer signed in, has not decided yet
+    #   finalised         = customer approved
+    #   failed            = customer rejected
+    status: str = "received"
     created_at: datetime | None = None
+    customer_id: str | None = None        # set once the customer signs in
+    # One-time code handed to the app after approval. The app swaps it for a token.
+    code: str | None = None
+    code_expires_at: datetime | None = None
+    code_used: bool = False
 
 
 @dataclass
@@ -106,8 +129,7 @@ class State:
     accounts: dict[str, Account]
     transactions: list[Transaction]
     consents: dict[str, Consent] = field(default_factory=dict)
-    tokens: dict[str, Token] = field(default_factory=dict)
+    tokens: dict[str, Token] = field(default_factory=dict)                  # by access token
+    refresh_tokens: dict[str, RefreshToken] = field(default_factory=dict)   # by refresh token
     authorisations: dict[str, Authorisation] = field(default_factory=dict)
     payments: dict[str, Payment] = field(default_factory=dict)
-    # When each consent request was made, to enforce the daily limit.
-    consent_request_log: list[datetime] = field(default_factory=list)

@@ -7,9 +7,6 @@ validate IBANs accept them.
 The data is generated with a fixed random seed, so every start gives the
 same accounts, amounts and descriptions. Only the dates move, because they
 are counted back from today.
-
-Creates a fresh bank: 2 customers, 5 accounts (3 GEL, 1 USD, 1 EUR) and 70 transactions.
-Out of which 6 are on the savings account and 64 are on the four current accounts.
 """
 
 import random
@@ -60,19 +57,15 @@ def _money(rng: random.Random, low: float, high: float) -> Decimal:
     return Decimal(str(round(rng.uniform(low, high), 2))).quantize(Decimal("0.01"))
 
 
-def _transactions_for(
-    account: Account, count: int, rng: random.Random
-) -> list[Transaction]:
+def _transactions_for(account: Account, count: int, rng: random.Random) -> list[Transaction]:
     """Generate `count` transactions for one account, newest first.
 
     The two most recent ones on a current account are pending, the rest are booked.
     """
     today = clock.now().date()
-    patterns = (
-        SAVINGS_PATTERNS if account.cash_account_type == "SVGS" else CURRENT_PATTERNS
-    )
+    patterns = SAVINGS_PATTERNS if account.cash_account_type == "SVGS" else CURRENT_PATTERNS
     # Spread the transactions over roughly the last 60 days, newest first.
-    day_offsets = sorted(rng.sample(range(60), count))
+    day_offsets = sorted(rng.sample(range(0, 60), count))
     transactions = []
     for index, offset in enumerate(day_offsets):
         name, description, direction, low, high = rng.choice(patterns)
@@ -100,51 +93,23 @@ def build_state() -> State:
     rng = random.Random(2026)  # fixed seed, so the data is the same every start
 
     customers = {
-        "c1": Customer(id="c1", name="Nino Kezherashvili"),
-        "c2": Customer(id="c2", name="Luka Darsalia"),
+        # Fake sign-ins for the approval page. Test values only, listed in the README.
+        "c1": Customer(id="c1", name="Nino Beridze", username="nino", password="mock-nino-123"),
+        "c2": Customer(id="c2", name="Giorgi Kapanadze", username="giorgi", password="mock-giorgi-123"),
     }
 
     # (resource_id, customer, currency, account name, product, type, opening balance, transactions)
     definitions = [
-        (
-            "a1",
-            "c1",
-            "GEL",
-            "Current account",
-            "Current account",
-            "CACC",
-            "3200.00",
-            20,
-        ),
-        (
-            "a2",
-            "c1",
-            "GEL",
-            "Savings account",
-            "Savings account",
-            "SVGS",
-            "10500.00",
-            6,
-        ),
+        ("a1", "c1", "GEL", "Current account", "Current account", "CACC", "3200.00", 20),
+        ("a2", "c1", "GEL", "Savings account", "Savings account", "SVGS", "10500.00", 6),
         ("a3", "c1", "USD", "Dollar account", "Current account", "CACC", "850.00", 12),
-        (
-            "a4",
-            "c2",
-            "GEL",
-            "Current account",
-            "Current account",
-            "CACC",
-            "1800.00",
-            20,
-        ),
+        ("a4", "c2", "GEL", "Current account", "Current account", "CACC", "1800.00", 20),
         ("a5", "c2", "EUR", "Euro account", "Current account", "CACC", "2500.00", 12),
     ]
 
     accounts: dict[str, Account] = {}
     transactions: list[Transaction] = []
-    for number, (rid, cust, currency, name, product, kind, opening, count) in enumerate(
-        definitions, start=1
-    ):
+    for number, (rid, cust, currency, name, product, kind, opening, count) in enumerate(definitions, start=1):
         account = Account(
             resource_id=rid,
             customer_id=cust,

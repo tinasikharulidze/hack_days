@@ -1,7 +1,8 @@
 """Admin API: controls for the person running the mock. Not part of the bank standard.
 
 Use it to change the bank's rules, switch faults on and off, jump forward
-in time, look at the sample data, and reset everything. There is no password on purpose
+in time, look at the sample data, and reset everything. There is no
+password on purpose: this is a local test tool, never expose it publicly.
 """
 
 import json
@@ -16,7 +17,6 @@ router = APIRouter(prefix="/admin", tags=["Admin (not part of the standard)"])
 
 
 # ---------- Settings ----------
-
 
 @router.get("/settings")
 def get_settings():
@@ -43,10 +43,8 @@ def change_settings(changes: dict):
 
 # ---------- Faults ----------
 
-
 class FaultIn(BaseModel):
     """What to send to switch a fault on."""
-
     kind: Literal[*faults.KINDS]  # one of the fault kinds listed in faults.py
     operation: str = "*"
     phase: Literal["before", "after"] = "before"
@@ -60,29 +58,18 @@ class FaultIn(BaseModel):
 @router.get("/faults")
 def list_faults():
     """Faults that are on right now."""
-    return {
-        "faults": faults.listing(),
-        "kinds": faults.KINDS,
-        "operations": faults.OPERATIONS,
-    }
+    return {"faults": faults.listing(), "kinds": faults.KINDS, "operations": faults.OPERATIONS}
 
 
 @router.post("/faults", status_code=201)
 def add_fault(fault: FaultIn):
     """Switch a fault on."""
-    allowed = (
-        fault.operation == "*"
-        or fault.operation in faults.OPERATIONS
-        or (
-            fault.operation.endswith(".*")
-            and any(op.startswith(fault.operation[:-1]) for op in faults.OPERATIONS)
-        )
+    allowed = fault.operation == "*" or fault.operation in faults.OPERATIONS or (
+        fault.operation.endswith(".*")
+        and any(op.startswith(fault.operation[:-1]) for op in faults.OPERATIONS)
     )
     if not allowed:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown operation. Use one of: {faults.OPERATIONS}",
-        )
+        raise HTTPException(status_code=422, detail=f"Unknown operation. Use one of: {faults.OPERATIONS}")
     return faults.add(**fault.model_dump()).__dict__
 
 
@@ -103,7 +90,6 @@ def remove_all_faults():
 
 # ---------- Time ----------
 
-
 class AdvanceIn(BaseModel):
     minutes: float = Field(gt=0, le=60 * 24 * 365)
 
@@ -117,13 +103,14 @@ def advance_time(body: AdvanceIn):
 
 # ---------- Data and reset ----------
 
-
 @router.get("/data")
 def sample_data():
     """The customers and accounts in the mock, so you know which IBANs to use."""
     state = store.STATE
     return {
-        "customers": [{"id": c.id, "name": c.name} for c in state.customers.values()],
+        # username and password are the fake sign-in for the approval page.
+        "customers": [{"id": c.id, "name": c.name, "username": c.username, "password": c.password}
+                      for c in state.customers.values()],
         "accounts": [
             {
                 "resource_id": a.resource_id,
@@ -131,9 +118,7 @@ def sample_data():
                 "iban": a.iban,
                 "currency": a.currency,
                 "name": a.name,
-                "balances": {
-                    k: str(v) for k, v in store.balances(a.resource_id).items()
-                },
+                "balances": {k: str(v) for k, v in store.balances(a.resource_id).items()},
             }
             for a in state.accounts.values()
         ],

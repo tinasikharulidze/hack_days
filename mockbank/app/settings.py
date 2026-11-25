@@ -1,8 +1,8 @@
 """The rules of the mock bank, in one place.
 
 Anything the Georgian standard fixes (consent validity, daily limits,
-timeouts, what is supported) is a setting here.
-A developer can change these while the mock is running
+timeouts, what is supported) is a setting here, not a number buried in the
+code. A developer can change these while the mock is running
 (PUT /admin/settings) or start the mock with their own settings file.
 
 Other modules must call get() every time they need a value. Never copy a
@@ -23,45 +23,31 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # --- Consent rules ---
-    consent_validity_days: int = Field(
-        90, ge=1
-    )  # how long a recurring consent stays valid
-    one_off_consent_validity_minutes: int = Field(
-        60, ge=1
-    )  # how long a one-off consent stays valid
-    max_consent_requests_per_day: int = Field(
-        4, ge=1
-    )  # consent requests allowed per day
-    consent_setup_timeout_hours: int = Field(
-        24, ge=1
-    )  # time allowed to approve a new consent
+    consent_validity_days: int = Field(90, ge=1)             # how long a recurring consent stays valid
+    one_off_consent_validity_minutes: int = Field(60, ge=1)  # how long a one-off consent stays valid
+    max_consent_requests_per_day: int = Field(4, ge=1)       # most data reads per day an app may ask for (frequencyPerDay)
+    consent_setup_timeout_hours: int = Field(24, ge=1)       # time allowed to approve a new consent
 
     # --- Payment rules ---
-    payment_approval_timeout_minutes: int = Field(
-        15, ge=1
-    )  # time allowed to approve a payment
+    payment_approval_timeout_minutes: int = Field(15, ge=1)  # time allowed to approve a payment
     supported_payment_products: list[str] = Field(default_factory=lambda: ["domestic"])
 
     # --- Access rules ---
-    token_validity_minutes: int = Field(60, ge=1)  # how long an access token works
-    account_identifier: Literal["IBAN"] = "IBAN"  # only IBANs identify accounts
+    token_validity_minutes: int = Field(60, ge=1)            # how long an access token works
+    authorisation_code_validity_minutes: int = Field(10, ge=1)  # how long the one-time code works
+    account_identifier: Literal["IBAN"] = "IBAN"             # only IBANs identify accounts
     supported_booking_statuses: list[str] = Field(
-        default_factory=lambda: [
-            "booked",
-            "pending",
-            "both",
-        ]  # "booked" must always be supported
+        default_factory=lambda: ["booked", "pending", "both"]  # "booked" must always be supported
     )
-    with_balance_supported: bool = False  # the withBalance query parameter
-    combined_service_indicator_supported: bool = (
-        False  # the combinedServiceIndicator field
-    )
+    with_balance_supported: bool = False                     # the withBalance query parameter
+    combined_service_indicator_supported: bool = False       # the combinedServiceIndicator field
 
     # --- Test convenience ---
     auto_approve: bool = False  # skip the Approve/Reject page and approve straight away
 
 
-# How much we trust each value. Shown by GET /admin/settings
+# How much we trust each value. Shown by GET /admin/settings so nobody
+# mistakes a guess for a rule.
 #   unverified    = taken from a summary of the Georgian rules, not the official document
 #   not confirmed = we have not found this value anywhere yet
 #   decided       = our own choice for this project
@@ -73,6 +59,7 @@ SETTING_STATUS = {
     "payment_approval_timeout_minutes": "not confirmed",
     "supported_payment_products": "decided",
     "token_validity_minutes": "decided",
+    "authorisation_code_validity_minutes": "decided",
     "account_identifier": "unverified",
     "supported_booking_statuses": "decided",
     "with_balance_supported": "unverified",

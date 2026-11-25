@@ -16,5 +16,6 @@ def app():
 
 @pytest.fixture()
 def client(app):
-    with TestClient(app) as test_client:
+    # follow_redirects=False so tests can look at the redirect back to the app
+    with TestClient(app, follow_redirects=False) as test_client:
         yield test_client
