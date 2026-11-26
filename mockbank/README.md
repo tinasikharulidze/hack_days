@@ -37,7 +37,8 @@ Everything here is made up. Never use real data.
 | 3 | Consent, approval page, token | Done |
 | 4 | Accounts, balances, transactions | Done |
 | 5 | Payments | **Done** |
-| 6 | Check against the standard, full test run | Not built yet |
+| 6 | Check against the standard, full test run | Checked against the official OpenAPI (see 10). Rule values still to verify |
+| 7 | Agent layer: MCP tools and the payment gate | Built, in its own project `../paygate` (see 13) |
 
 **Today an app can ask for consent, get a token, read accounts, balances and
 transactions, and make payments that the customer approves.** What is left is
@@ -585,6 +586,14 @@ look means editing that file only.
 
 ## 10. What comes next
 
+**Checked against the official OpenAPI (Bank of Georgia, version 0.8).** We replayed every call our
+tests make and checked each answer against the standard's schemas, status codes, content types and
+required headers. All answers fit. Two fixes came out of it: the single-transaction answer is nested
+two levels, and error answers now echo `X-Request-ID`. Not built, on purpose: authorisation status
+calls (GET/PUT), cancellation authorisations, bulk and periodic payments, `/banking/products`.
+The OpenAPI file has no rule values (90 days, 1 hour, 4 reads, 15 minutes): those are still unverified
+and need the official manual.
+
 | Step | Calls |
 |---|---|
 | 6 Check | Compare against the standard and run a whole flow from consent to payment. |
@@ -592,7 +601,7 @@ look means editing that file only.
 **Guesses to check against the standard in step 6.** These are our reading of
 the standard, not confirmed rules:
 
-- A single transaction is wrapped as `transactionsDetails`.
+- ~~A single transaction is wrapped as `transactionsDetails`.~~ Checked: the standard nests it as `transactionsDetails` > `transactionDetails`. Fixed.
 - An account that was not shared answers `404 RESOURCE_UNKNOWN` (not 403).
 - The account list is lenient: an account shows if the app named it in any part of the consent.
 - `dateFrom` after `dateTo` gives `PERIOD_INVALID`.
@@ -640,3 +649,8 @@ Foreign, bulk and recurring payments, card accounts, real certificates and
 request signing, any screen beyond the approval pages, and any trust level other
 than "the customer approves every payment" (for example an agent paying on its own
 within limits).
+
+## 13. The agent layer
+
+The MCP tools and the payment gate for agents live in their own project: `../paygate`. It talks to this
+mock over HTTP, and its tests use this mock as the bank.

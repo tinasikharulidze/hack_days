@@ -1,0 +1,11 @@
+{
+  "bank_url": "http://127.0.0.1:8000",
+  "callback_url": "http://127.0.0.1:8001/callback",
+  "max_payment_gel": "200.00",
+  "max_per_day_gel": "500.00",
+  "duplicate_window_minutes": 60,
+  "bank_timeout_seconds": 10,
+  "consent_days": 30,
+  "reads_per_day": 4,
+  "max_transactions": 50
+}
