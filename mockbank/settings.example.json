@@ -8,6 +8,7 @@
   "authorisation_code_validity_minutes": 10,
   "account_identifier": "IBAN",
   "supported_payment_products": ["domestic"],
+  "deduplicate_by_request_id": false,
   "supported_booking_statuses": ["booked", "pending", "both"],
   "with_balance_supported": false,
   "combined_service_indicator_supported": false,

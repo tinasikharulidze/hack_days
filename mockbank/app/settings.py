@@ -31,6 +31,9 @@ class Settings(BaseModel):
     # --- Payment rules ---
     payment_approval_timeout_minutes: int = Field(15, ge=1)  # time allowed to approve a payment
     supported_payment_products: list[str] = Field(default_factory=lambda: ["domestic"])
+    # False (default): sending the same payment twice makes two payments, like many real banks.
+    # True: a repeated X-Request-ID returns the first payment instead of making a new one.
+    deduplicate_by_request_id: bool = False
 
     # --- Access rules ---
     token_validity_minutes: int = Field(60, ge=1)            # how long an access token works
@@ -58,6 +61,7 @@ SETTING_STATUS = {
     "consent_setup_timeout_hours": "unverified",
     "payment_approval_timeout_minutes": "not confirmed",
     "supported_payment_products": "decided",
+    "deduplicate_by_request_id": "decided",
     "token_validity_minutes": "decided",
     "authorisation_code_validity_minutes": "decided",
     "account_identifier": "unverified",

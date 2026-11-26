@@ -109,7 +109,7 @@ class Payment:
     payment_id: str
     consent_id: str
     customer_id: str | None
-    status: str               # RCVD, PDNG, ACTC, ACCP, ACSC, RJCT, CANC
+    status: str               # the five we use: RCVD, ACSC, PDNG, RJCT, CANC
     product: str              # "domestic"
     debtor_iban: str
     creditor_iban: str
@@ -120,6 +120,9 @@ class Payment:
     end_to_end_id: str | None
     created_at: datetime
     approval_deadline: datetime  # after this, an unapproved payment becomes RJCT
+    request_id: str | None = None        # the app's X-Request-ID on the call that created it
+    tpp_redirect_uri: str | None = None  # where to send the customer after approval
+    completed_at: datetime | None = None  # when the money moved (status ACSC)
 
 
 @dataclass

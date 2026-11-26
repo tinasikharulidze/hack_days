@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
 from app.errors import BankError, bank_error_handler, validation_error_handler
-from app.routers import accounts, admin, bank_pages, consents, oauth, payments
+from app.routers import accounts, admin, bank_pages, consents, oauth, payment_pages, payments
 
 
 def create_app() -> FastAPI:
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
 
     app.include_router(consents.router)
     app.include_router(bank_pages.router)
+    app.include_router(payment_pages.router)
     app.include_router(oauth.router)
     app.include_router(accounts.router)
     app.include_router(payments.router)

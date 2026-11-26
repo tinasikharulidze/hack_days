@@ -28,19 +28,20 @@ Everything here is made up. Never use real data.
 | **Pending** | A transaction the bank has seen but not finished. It can still change. |
 | **IBAN** | The account number. |
 
-## 2. Status: step 4 of 6
+## 2. Status: step 5 of 6
 
 | Step | What | State |
 |---|---|---|
 | 1 | Read the standard | Done |
 | 2 | Skeleton: sample data, settings, faults, clock, errors, admin controls | Done |
 | 3 | Consent, approval page, token | Done |
-| 4 | Accounts, balances, transactions | **Done** |
-| 5 | Payments | Not built yet |
+| 4 | Accounts, balances, transactions | Done |
+| 5 | Payments | **Done** |
 | 6 | Check against the standard, full test run | Not built yet |
 
-**Today an app can ask for consent, get a token and read accounts, balances and
-transactions.** Payments are still an empty placeholder.
+**Today an app can ask for consent, get a token, read accounts, balances and
+transactions, and make payments that the customer approves.** What is left is
+checking everything against the standard (step 6).
 
 ## 3. Run it
 
@@ -54,7 +55,7 @@ uv run uvicorn app.main:app --reload
 
 - http://127.0.0.1:8000/docs lists every call and lets you try it.
 - http://127.0.0.1:8000/health answers `{"status": "ok"}` if the mock is up.
-- `uv run pytest` runs the tests (84 today).
+- `uv run pytest` runs the tests (113 today).
 
 The mock keeps everything in memory. Stop it and it forgets everything.
 
@@ -135,7 +136,7 @@ Afterwards the customer is sent back to the app's `TPP-Redirect-URI`:
 - approved: `...?code=<one-time code>&consentId=<id>`
 - rejected: `...?error=access_denied&consentId=<id>`
 
-For automated tests, set `auto_approve` to true (see 6.2). Opening the link then
+For automated tests, set `auto_approve` to true (see 7.2). Opening the link then
 approves at once, with no screens, and still sends the customer back with a code.
 
 ### 4.3 Get a token
@@ -183,7 +184,7 @@ Statuses: `received` → `valid` → `expired`, or `rejected`, or `terminatedByT
 | One-off consent | Valid for 60 minutes after approval (`one_off_consent_validity_minutes`) |
 
 The mock has no background timer. A consent's status is brought up to date
-each time someone asks. Use the mock clock (6.4) to test expiry.
+each time someone asks. Use the mock clock (7.4) to test expiry.
 
 ### 4.6 The access check (used by accounts, and later payments)
 
@@ -205,7 +206,7 @@ Consent-ID: <consent id>
 | Consent ended (deleted, rejected, not approved) | 401 `CONSENT_INVALID` |
 | Consent ran out | 401 `CONSENT_EXPIRED` |
 
-The account calls use it now (see 5). The payment calls will use it in step 5.
+The account calls (see 5) and the payment calls (see 6) both use it.
 
 ## 5. Reading accounts (step 4)
 
@@ -288,9 +289,129 @@ Every account call is one "read". A consent allows `frequencyPerDay` reads a day
 
 Then the answer is built, and an "after" fault, if one is on, runs last.
 
-## 6. What else works
+## 6. Payments (step 5)
 
-### 6.1 Sample data
+An app can send money out of a customer's account. **The customer approves every
+payment** on the bank's page. (This is the "ask every time" level of trust. A level
+where the app may pay on its own within limits is not built.)
+
+### 6.1 How a payment goes
+
+```
+App                                Bank (this mock)                 Customer
+ |  1. POST /v1/payments/domestic -> |
+ |  <---- paymentId + link           |   status: RCVD (waiting). No money has moved.
+ |  2. sends the customer to the link ---------------------------->|
+ |                                   |  <---- signs in, checks the payment, Approve
+ |                                   |   status: ACSC (money has moved)
+ |  <---- customer comes back to the app with ?paymentId=...           |
+ |  3. GET .../status  ------------> |   the app must ask what happened
+ |  <---- ACSC
+```
+
+Every call needs `Authorization`, `Consent-ID` and `X-Request-ID`. Starting a payment
+also needs `PSU-IP-Address` (any IP) and `TPP-Redirect-URI` (where to send the
+customer back).
+
+### 6.2 The calls
+
+| Call | What it does |
+|---|---|
+| `POST /v1/payments/domestic` | Start a payment. Answer `201` with `paymentId`, status `RCVD` and links (`scaRedirect`, `self`, `status`). |
+| `GET /v1/payments/domestic/{id}` | The payment as asked, plus its status |
+| `GET /v1/payments/domestic/{id}/status` | Just `{"transactionStatus": ...}` |
+| `DELETE /v1/payments/domestic/{id}` | Cancel it. Answer `202`. Only while it waits for the customer. |
+| `POST /v1/payments/domestic/{id}/authorisations` | A fresh approval link (`409` if it can no longer be approved) |
+
+The body to start a payment:
+
+```
+{
+  "debtorAccount": {"iban": "GE94MB0000000000000001"},
+  "instructedAmount": {"currency": "GEL", "amount": "25.50"},
+  "creditorAccount": {"iban": "GE13MB0000000000000004"},
+  "creditorName": "Example Shop",
+  "endToEndIdentification": "ORDER-1",
+  "remittanceInformationUnstructured": "Order 1"
+}
+```
+
+The last two are optional (35 and 140 characters at most). Only the product
+`domestic` is offered: a single payment in lari, from a lari account.
+
+### 6.3 What the bank checks when a payment starts
+
+| Problem | Answer |
+|---|---|
+| Unknown product (like `sepa`) | `404 PRODUCT_UNKNOWN` |
+| Known product the bank does not offer (`foreign`) | `403 PRODUCT_INVALID` |
+| Paying account does not exist, is not ours, or was not shared in the consent | `400 RESOURCE_UNKNOWN` (all three look the same) |
+| Not lari, or the paying or receiving account is not a lari account | `400 PARAMETER_NOT_CONSISTENT` |
+| Paying and receiving account are the same | `400 PARAMETER_NOT_CONSISTENT` |
+| Not enough money (counting pending payments out) | `400 PAYMENT_FAILED` |
+| Bad IBAN, amount (zero, text, more than 2 decimals), too-long field, unknown field, missing header | `400 FORMAT_ERROR` |
+| Token or consent problems | The same `401` codes as in 4.6 |
+
+A refused request creates nothing. The receiving account may be outside the bank
+(any well-formed IBAN) or one of our own accounts.
+
+### 6.4 The customer's approval
+
+The link opens the same two screens as for consent, in the same colours: **sign in**,
+then **see the payment (amount, who gets it, from which account) and press Pay or
+Reject**. The customer signs in again for every payment. Only the owner of the paying
+account is let in.
+
+Then the customer is sent back to the app's `TPP-Redirect-URI`:
+`...?paymentId=<id>`, with `&error=access_denied` (rejected) or `&error=payment_failed`
+(not enough money any more). **The redirect is only a nudge. The app must ask the
+status call what happened.**
+
+With `auto_approve` on (see 7.2) the screens are skipped: opening the link approves at once.
+
+### 6.5 Statuses, and what moves the money
+
+| Status | Meaning |
+|---|---|
+| `RCVD` | Received, waiting for the customer. Every payment starts here. |
+| `ACSC` | Completed. The money has moved. |
+| `PDNG` | Stuck in pending. The money has **not** moved. Only with the `payment_stays_pending` fault. |
+| `RJCT` | Rejected: the customer said no, nobody approved in 15 minutes, or not enough money at approval. |
+| `CANC` | Cancelled by the app before approval. |
+
+`ACSC`, `PDNG`, `RJCT` and `CANC` are final. The standard has more statuses; these five are the useful ones.
+
+When a payment completes, a booked transaction appears on the paying account (money
+out), and on the receiving account too if it is one of ours (money in). So balances and
+transactions (see 5) show the payment straight away. The money is checked again at
+approval, because it may have gone elsewhere since the payment started.
+
+### 6.6 Paying twice: what to watch
+
+The bank can be asked **"did the same payment happen more than once?"**:
+`GET /admin/payments` lists every payment and a `duplicates` list. A duplicate is two
+or more completed payments with the same paying account, receiving account, amount and
+`endToEndIdentification`.
+
+How it happens at this trust level, since the customer approves each payment:
+
+- **Lost answer.** The app starts a payment, the bank makes it, but the app is told
+  `503` (a fault with phase `after`). The app does not know the payment id. A
+  payment now waits unseen. If the app tries again and the customer approves both
+  links, the money leaves twice.
+- **Failed status check.** The customer approves, the money moves, then the status call
+  fails. The app does not know the result, starts a new payment, and the customer
+  approves again. (This is a test in the suite.)
+
+The bank does **not** catch repeats by default, like many real banks. Set
+`deduplicate_by_request_id` to true and the same `X-Request-ID` returns the first
+payment instead of making another.
+
+Not modelled: payment limits, and the bank noticing payments that look alike.
+
+## 7. What else works
+
+### 7.1 Sample data
 
 Built fresh at every start (and on reset). The numbers are the same every
 time, so tests can rely on them.
@@ -311,7 +432,7 @@ Each account reports two balances, as the standard does:
 
 See all of it at `GET /admin/data`, including the IBANs you will need.
 
-### 6.2 Settings (the bank's rules)
+### 7.2 Settings (the bank's rules)
 
 The Georgian rules are not hard-coded. They are settings, so you can change
 them and test how your app reacts. Each one is labelled with how far we trust
@@ -329,6 +450,7 @@ and have not been checked against the official document.**
 | `with_balance_supported` | false | unverified |
 | `combined_service_indicator_supported` | false | unverified |
 | `supported_payment_products` | domestic | decided |
+| `deduplicate_by_request_id` | false | decided |
 | `supported_booking_statuses` | booked, pending, both | decided |
 | `token_validity_minutes` | 60 | decided |
 | `authorisation_code_validity_minutes` | 10 | decided |
@@ -346,7 +468,7 @@ Two ways to change them:
 
 Unknown setting names and impossible values (such as 0 days) are rejected.
 
-### 6.3 Faults (making the bank misbehave)
+### 7.3 Faults (making the bank misbehave)
 
 Real banks are slow and fail. Switch on a fault and the mock does the same.
 
@@ -355,7 +477,7 @@ Real banks are slow and fail. Switch on a fault and the mock does the same.
 | `slow` | Waits `delay_seconds` (0 to 300), then carries on. |
 | `server_error` | Stops with status `429`, `500` or `503`. |
 | `consent_expires_early` | The next approved consent dies after 2 minutes instead of its full time. |
-| `payment_stays_pending` | A payment never gets past "pending". Used from step 5. |
+| `payment_stays_pending` | The next approved payment ends as `PDNG` and never completes, and no money moves. |
 
 Options for a fault:
 
@@ -385,13 +507,13 @@ POST /admin/faults
  "phase": "after", "times": 1, "status_code": 503}
 ```
 
-### 6.4 Clock
+### 7.4 Clock
 
 `POST /admin/time/advance` with `{"minutes": 90}` moves the bank's clock
 forward. Use it to see what your app does when a token or consent has
 expired, without waiting. Reset puts the clock back to real time.
 
-### 6.5 Errors
+### 7.5 Errors
 
 Errors on the standard's calls follow the standard:
 
@@ -410,13 +532,13 @@ Errors on the standard's calls follow the standard:
 
 Not yet checked: 408 and 415 codes, which we have not seen in the standard.
 
-### 6.6 Reset
+### 7.6 Reset
 
 `POST /admin/reset` gives you fresh data, starting settings, no faults and the
-real clock. It also forgets all consents and tokens. Call it at the start of
+real clock. It also forgets all consents, tokens and payments. Call it at the start of
 every test.
 
-## 7. Admin controls
+## 8. Admin controls
 
 These are ours, not part of the standard. **They have no password. Never put
 this mock on a public server.**
@@ -431,21 +553,21 @@ this mock on a public server.**
 | `DELETE /admin/faults` | Switch all off |
 | `POST /admin/time/advance` | Move the clock forward |
 | `GET /admin/data` | See customers (with fake sign-ins), accounts, IBANs, balances |
+| `GET /admin/payments` | Every payment, and which were made twice (see 6.6) |
 | `POST /admin/reset` | Start over |
 
-## 8. Look and feel
+## 9. Look and feel
 
-The approval pages use the project's brand colours: bubblegum pink `#FD6AD2`,
+The approval pages (for consent and for payments) use the project's brand colours: bubblegum pink `#FD6AD2`,
 galactic violet `#553EFE`, sky blue `#7CC4F5` and marshmallow white `#F0F0F0`,
 on a soft pink-and-violet glow. They carry a "Test bank" badge and a line that
 nothing is real. All colours live in one file, `app/brand.py`, so changing the
 look means editing that file only.
 
-## 9. What comes next
+## 10. What comes next
 
 | Step | Calls |
 |---|---|
-| 5 Payments | Start a domestic payment, read it, check its status, cancel it, approve it. |
 | 6 Check | Compare against the standard and run a whole flow from consent to payment. |
 
 **Guesses to check against the standard in step 6.** These are our reading of
@@ -457,8 +579,13 @@ the standard, not confirmed rules:
 - `dateFrom` after `dateTo` gives `PERIOD_INVALID`.
 - An unknown IBAN in a consent request gives `RESOURCE_UNKNOWN`, and an unknown consent id gives `403 CONSENT_UNKNOWN`.
 - A pending transaction is matched on its value date.
+- A payment answers `202` to a cancel, and `405 CANCELLATION_INVALID` once it is no longer waiting.
+- An unknown payment id answers `404 RESOURCE_UNKNOWN`, and a payment of another consent looks unknown too.
+- Not enough money is `400 PAYMENT_FAILED`, both when a payment starts and again at approval.
+- The address the customer returns to carries `paymentId` and `error`. The standard does not say what it should carry.
+- The approval step has no `scaStatus` calls (we skipped them).
 
-## 10. Where things are
+## 11. Where things are
 
 | File | What it does |
 |---|---|
@@ -468,7 +595,10 @@ the standard, not confirmed rules:
 | `app/routers/oauth.py` | The token step (working) |
 | `app/routers/admin.py` | The admin controls (working) |
 | `app/routers/accounts.py` | The account calls (working) |
-| `app/routers/payments.py` | Payment calls (placeholder) |
+| `app/routers/payments.py` | The payment calls (working) |
+| `app/routers/payment_pages.py` | The payment approval screens (working) |
+| `app/payment_rules.py` | A payment's life: statuses, moving the money, cancelling |
+| `app/iban.py` | Checks that an IBAN is well formed |
 | `app/consent_rules.py` | A consent's life (expiry, approving, rejecting), what it allows, the daily read limit |
 | `app/auth.py` | The access check (token plus consent) and the daily read count |
 | `app/brand.py` | Colours and layout of the pages |
@@ -484,7 +614,9 @@ the standard, not confirmed rules:
 | `settings.example.json` | Starting rules to copy and edit |
 | `requirements.txt` | Packages, if you do not use `uv` |
 
-## 11. Not planned
+## 12. Not planned
 
 Foreign, bulk and recurring payments, card accounts, real certificates and
-request signing, and any screen beyond the approval pages.
+request signing, any screen beyond the approval pages, and any trust level other
+than "the customer approves every payment" (for example an agent paying on its own
+within limits).

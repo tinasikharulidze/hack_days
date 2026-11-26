@@ -68,12 +68,21 @@ def _allowed_accounts(consent: Consent, customer: Customer) -> list[Account]:
     return [a for a in mine if a.iban in asked] if asked else mine
 
 
-def _redirect_back(consent: Consent, **params: str) -> RedirectResponse:
-    """Send the customer back to the app, adding our answer to its address."""
-    parts = urlparse(consent.tpp_redirect_uri)
+def redirect_to(uri: str, **params: str) -> RedirectResponse:
+    """Send the customer back to the app's address, adding our answer to it.
+
+    Shared with the payment pages. Anything already in the address (for
+    example ?session=42) is kept.
+    """
+    parts = urlparse(uri)
     query = parse_qsl(parts.query) + list(params.items())
     target = urlunparse(parts._replace(query=urlencode(query)))
     return RedirectResponse(target, status_code=303)
+
+
+def _redirect_back(consent: Consent, **params: str) -> RedirectResponse:
+    """Send the customer back to the app that asked for this consent."""
+    return redirect_to(consent.tpp_redirect_uri, **params)
 
 
 def _finish_approval(authorisation: Authorisation, consent: Consent, customer: Customer,

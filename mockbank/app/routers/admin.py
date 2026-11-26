@@ -126,6 +126,36 @@ def sample_data():
     }
 
 
+@router.get("/payments")
+def all_payments():
+    """Every payment the bank has seen, and which ones look like the same payment made twice.
+
+    "Duplicates" are groups of two or more COMPLETED payments (status ACSC, money moved)
+    with the same paying account, receiving account, amount and endToEndIdentification.
+    This is the number to watch when testing an app that retries after errors.
+    """
+    payments = list(store.STATE.payments.values())
+    groups: dict[tuple, list] = {}
+    for p in payments:
+        if p.status == "ACSC":
+            groups.setdefault((p.debtor_iban, p.creditor_iban, str(p.amount), p.end_to_end_id), []).append(p.payment_id)
+    return {
+        "payments": [
+            {"payment_id": p.payment_id, "status": p.status, "debtor_iban": p.debtor_iban,
+             "creditor_iban": p.creditor_iban, "amount": str(p.amount), "currency": p.currency,
+             "end_to_end_id": p.end_to_end_id, "request_id": p.request_id,
+             "created_at": p.created_at.isoformat()}
+            for p in payments
+        ],
+        "completed_count": sum(p.status == "ACSC" for p in payments),
+        "duplicates": [
+            {"debtor_iban": k[0], "creditor_iban": k[1], "amount": k[2], "end_to_end_id": k[3],
+             "times_paid": len(ids), "payment_ids": ids}
+            for k, ids in groups.items() if len(ids) > 1
+        ],
+    }
+
+
 @router.post("/reset")
 def reset():
     """Start over: fresh data, starting settings, no faults, real clock."""
