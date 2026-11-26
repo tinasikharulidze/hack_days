@@ -28,7 +28,7 @@ from app import clock, faults, settings, store
 from app.errors import BankError
 from app.models import Account, Consent, Payment, Transaction
 
-CURRENCY = "GEL"   # a domestic payment is in lari, from a lari account
+CURRENCY = "GEL"  # a domestic payment is in lari, from a lari account
 
 
 def account_by_iban(iban: str) -> Account | None:
@@ -50,23 +50,47 @@ def refresh(payment: Payment) -> Payment:
 def find_or_404(payment_id: str, consent: Consent, product: str) -> Payment:
     """Find a payment made under this consent. Anything else looks like "unknown"."""
     payment = store.STATE.payments.get(payment_id)
-    if payment is None or payment.consent_id != consent.consent_id or payment.product != product:
+    if (
+        payment is None
+        or payment.consent_id != consent.consent_id
+        or payment.product != product
+    ):
         raise BankError(404, "RESOURCE_UNKNOWN", "This payment does not exist.")
     return refresh(payment)
 
 
-def new_payment(consent: Consent, product: str, debtor: Account, creditor_iban: str, creditor_name: str,
-                amount: Decimal, remittance: str | None, end_to_end_id: str | None,
-                request_id: str, tpp_redirect_uri: str) -> Payment:
+def new_payment(
+    consent: Consent,
+    product: str,
+    debtor: Account,
+    creditor_iban: str,
+    creditor_name: str,
+    amount: Decimal,
+    remittance: str | None,
+    end_to_end_id: str | None,
+    request_id: str,
+    tpp_redirect_uri: str,
+) -> Payment:
     """Create a payment in status RCVD. The caller has already checked the request."""
     now = clock.now()
     payment = Payment(
-        payment_id=str(uuid.uuid4()), consent_id=consent.consent_id, customer_id=consent.customer_id,
-        status="RCVD", product=product, debtor_iban=debtor.iban, creditor_iban=creditor_iban,
-        creditor_name=creditor_name, amount=amount, currency=CURRENCY, remittance=remittance,
-        end_to_end_id=end_to_end_id, created_at=now, request_id=request_id,
+        payment_id=str(uuid.uuid4()),
+        consent_id=consent.consent_id,
+        customer_id=consent.customer_id,
+        status="RCVD",
+        product=product,
+        debtor_iban=debtor.iban,
+        creditor_iban=creditor_iban,
+        creditor_name=creditor_name,
+        amount=amount,
+        currency=CURRENCY,
+        remittance=remittance,
+        end_to_end_id=end_to_end_id,
+        created_at=now,
+        request_id=request_id,
         tpp_redirect_uri=tpp_redirect_uri,
-        approval_deadline=now + timedelta(minutes=settings.get().payment_approval_timeout_minutes),
+        approval_deadline=now
+        + timedelta(minutes=settings.get().payment_approval_timeout_minutes),
     )
     store.STATE.payments[payment.payment_id] = payment
     return payment
@@ -86,17 +110,30 @@ def _move_money(payment: Payment, debtor: Account) -> None:
     """
     today = clock.now().date()
 
-    def booked(account: Account, amount: Decimal, other_name: str, other_iban: str) -> Transaction:
+    def booked(
+        account: Account, amount: Decimal, other_name: str, other_iban: str
+    ) -> Transaction:
         return Transaction(
-            transaction_id=str(uuid.uuid4()), account_id=account.resource_id, status="booked",
-            amount=amount, currency=CURRENCY, booking_date=today, value_date=today,
-            counterparty_name=other_name, counterparty_iban=other_iban,
-            remittance=payment.remittance or "Payment")
+            transaction_id=str(uuid.uuid4()),
+            account_id=account.resource_id,
+            status="booked",
+            amount=amount,
+            currency=CURRENCY,
+            booking_date=today,
+            value_date=today,
+            counterparty_name=other_name,
+            counterparty_iban=other_iban,
+            remittance=payment.remittance or "Payment",
+        )
 
-    store.STATE.transactions.append(booked(debtor, -payment.amount, payment.creditor_name, payment.creditor_iban))
+    store.STATE.transactions.append(
+        booked(debtor, -payment.amount, payment.creditor_name, payment.creditor_iban)
+    )
     creditor = account_by_iban(payment.creditor_iban)
     if creditor is not None:
-        store.STATE.transactions.append(booked(creditor, payment.amount, debtor.owner_name, debtor.iban))
+        store.STATE.transactions.append(
+            booked(creditor, payment.amount, debtor.owner_name, debtor.iban)
+        )
 
 
 def approve(payment: Payment) -> str:
@@ -127,6 +164,9 @@ def reject(payment: Payment) -> None:
 def cancel(payment: Payment) -> None:
     """The app withdraws a payment. Only possible while it waits for the customer."""
     if payment.status != "RCVD":
-        raise BankError(405, "CANCELLATION_INVALID",
-                        f"The payment is {payment.status}; only a payment waiting for approval can be cancelled.")
+        raise BankError(
+            405,
+            "CANCELLATION_INVALID",
+            f"The payment is {payment.status}; only a payment waiting for approval can be cancelled.",
+        )
     payment.status = "CANC"

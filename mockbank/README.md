@@ -55,9 +55,28 @@ uv run uvicorn app.main:app --reload
 
 - http://127.0.0.1:8000/docs lists every call and lets you try it.
 - http://127.0.0.1:8000/health answers `{"status": "ok"}` if the mock is up.
-- `uv run pytest` runs the tests (113 today).
+- `uv run pytest` runs the tests (114 today).
 
 The mock keeps everything in memory. Stop it and it forgets everything.
+
+### 3.1 See it work
+
+With the mock running, open a second terminal in the `mockbank` folder and run:
+
+```
+uv run python -m demo.run_flow
+```
+
+It plays an app and a customer through two stories and explains each step in plain
+words:
+
+1. **A careful app:** asks for permission, the customer approves, the app reads the
+   accounts, makes a payment, and carries on when its token runs out.
+2. **A careless app:** the money moves, then a status check fails. The app does not know
+   the payment went through, pays again, and the bank's duplicate report catches it.
+
+It wipes the mock first (it starts with a reset). It is also a short, readable example of
+how an app talks to the bank (`demo/run_flow.py`), and it runs as one of the tests.
 
 ## 4. The consent flow (step 3)
 
@@ -610,6 +629,7 @@ the standard, not confirmed rules:
 | `app/faults.py` | Makes the bank misbehave on purpose |
 | `app/clock.py` | The bank's clock, which can be moved |
 | `app/errors.py` | The standard error format and allowed codes |
+| `demo/run_flow.py` | The two-story demo from 3.1. Also an example app to copy from. |
 | `tests/` | Automated tests (`helpers.py` plays the app and the customer) |
 | `settings.example.json` | Starting rules to copy and edit |
 | `requirements.txt` | Packages, if you do not use `uv` |

@@ -258,4 +258,4 @@ async def one_transaction(
     if found is None:
         raise BankError(404, "RESOURCE_UNKNOWN", "This transaction does not exist on this account.")
     await faults.run("accounts.transaction", "after")
-    return _reply({"transactionsDetails": _transaction_json(found)}, x_request_id)
+    return _reply({"transactionsDetails": {"transactionDetails": _transaction_json(found)}}, x_request_id)

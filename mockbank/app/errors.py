@@ -106,13 +106,20 @@ def _body(category: str, code: str, text: str) -> dict:
     return {"tppMessages": [{"category": category, "code": code, "text": text[:500]}]}
 
 
+def _echo(request: Request) -> dict:
+    """The standard lists X-Request-ID as a header of every answer, errors too."""
+    rid = request.headers.get("x-request-id")
+    return {"X-Request-ID": rid} if rid else {}
+
+
 async def bank_error_handler(request: Request, exc: BankError) -> Response:
     """Turns a BankError into the standard error answer."""
-    if exc.code is None:
-        return Response(status_code=exc.status_code)  # no body, as the standard says
+    if exc.code is None:  # no body, as the standard says
+        return Response(status_code=exc.status_code, headers=_echo(request))
     return JSONResponse(
         status_code=exc.status_code,
         content=_body(exc.category, exc.code, exc.text),
+        headers=_echo(request),
     )
 
 
@@ -125,5 +132,7 @@ async def validation_error_handler(
         f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
     )
     return JSONResponse(
-        status_code=400, content=_body("ERROR", "FORMAT_ERROR", problems)
+        status_code=400,
+        content=_body("ERROR", "FORMAT_ERROR", problems),
+        headers=_echo(request),
     )

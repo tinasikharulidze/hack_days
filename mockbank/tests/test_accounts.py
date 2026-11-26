@@ -181,7 +181,7 @@ def test_one_transaction(client):
     items = client.get(tx_url(ids[0], bookingStatus="booked"), headers=h).json()["transactions"]["booked"]
     wanted = items[0]
     r = client.get(f"/v1/accounts/{ids[0]}/transactions/{wanted['transactionId']}", headers=h)
-    assert r.status_code == 200 and r.json()["transactionsDetails"] == wanted
+    assert r.status_code == 200 and r.json()["transactionsDetails"]["transactionDetails"] == wanted
     assert err(client.get(f"/v1/accounts/{ids[0]}/transactions/nope", headers=h)) == (404, "RESOURCE_UNKNOWN")
     # A transaction id from another account is not found on this one.
     assert err(client.get(f"/v1/accounts/{ids[1]}/transactions/{wanted['transactionId']}", headers=h)) == (404, "RESOURCE_UNKNOWN")
