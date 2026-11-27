@@ -75,3 +75,116 @@ def test_the_loop_stops_if_the_agent_never_stops_calling_tools(app, tmp_path):
                                             str(tmp_path / "t.jsonl"), max_steps=3)
                 assert "too many tool calls" in text
     asyncio.run(go())
+
+
+# ---------------------------------------------------------------- the chat web page
+
+def load_chat_ui():
+    ui_spec = importlib.util.spec_from_file_location("chat_ui", Path(__file__).parents[1] / "examples/chat_ui.py")
+    module = importlib.util.module_from_spec(ui_spec)
+    ui_spec.loader.exec_module(module)
+    return module
+
+
+def test_the_web_page_runs_a_turn_and_reports_the_tool_calls(app, tmp_path):
+    import httpx
+    chat_ui = load_chat_ui()
+
+    async def go():
+        async with World(app, tmp_path) as w:
+            async with Client(w.server) as mcp:
+                llm = PretendGemini([
+                    model_says(types.Part(function_call=types.FunctionCall(
+                        name="connect_bank", args={"ibans": [a["iban"] for a in w.accounts]}))),
+                    model_says(types.Part(text="Open the link to approve."))])
+                web = chat_ui.build_app(llm, "x", types.GenerateContentConfig(), mcp, str(tmp_path / "t.jsonl"))
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://ui") as browser:
+                    page = await browser.get("/")
+                    assert page.status_code == 200 and "Payment assistant" in page.text
+                    answer = (await browser.post("/chat", json={"message": "connect me"})).json()
+                    assert answer["reply"] == "Open the link to approve."
+                    call = answer["tools"][0]
+                    assert call["name"] == "connect_bank" and call["result"]["customer_link"]   # the page shows a button for it
+                    kinds = [step["kind"] for step in answer["timeline"]]
+                    assert kinds == ["model", "tool", "model"]                 # the timeline: model, tool, model
+                    assert all(step["ms"] >= 0 for step in answer["timeline"]) and answer["total_ms"] >= 0
+                    assert (await browser.post("/chat", json={"message": "  "})).status_code == 400
+                    assert (await browser.post("/reset")).json() == {"ok": True}
+    asyncio.run(go())
+
+
+def test_the_developer_panel_shows_the_banks_books_and_switches_faults(app, tmp_path):
+    import httpx
+    chat_ui = load_chat_ui()
+
+    async def go():
+        async with World(app, tmp_path) as w:
+            async with Client(w.server) as mcp:
+                web = chat_ui.build_app(PretendGemini([]), "x", types.GenerateContentConfig(), mcp,
+                                        str(tmp_path / "t.jsonl"), bank_url="http://mock",
+                                        bank_transport=httpx.ASGITransport(app=app))
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://ui") as browser:
+                    await w.connect()
+                    await w.pay(intent="order-1")
+                    books = (await browser.get("/dev/bank")).json()
+                    assert books["ok"] and books["duplicates"] == [] and books["accounts"] and books["faults"] == []
+                    for preset in chat_ui.FAULT_PRESETS:                       # every ready-made fault can be switched on
+                        assert (await browser.post("/dev/fault", json={"preset": preset})).json() == {"ok": True}
+                    assert len((await browser.get("/dev/bank")).json()["faults"]) == len(chat_ui.FAULT_PRESETS)
+                    await browser.post("/dev/fault", json={"preset": "clear"})
+                    assert (await browser.get("/dev/bank")).json()["faults"] == []
+                    assert (await browser.post("/dev/fault", json={"preset": "nope"})).status_code == 400
+    asyncio.run(go())
+
+
+def test_the_developer_panel_says_so_when_the_bank_is_not_reachable(app, tmp_path):
+    import httpx
+    chat_ui = load_chat_ui()
+
+    def broken(request):
+        raise httpx.ConnectError("bank is off")
+
+    async def go():
+        async with World(app, tmp_path) as w:
+            async with Client(w.server) as mcp:
+                web = chat_ui.build_app(PretendGemini([]), "x", types.GenerateContentConfig(), mcp,
+                                        str(tmp_path / "t.jsonl"), bank_url="http://mock",
+                                        bank_transport=httpx.MockTransport(broken))
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://ui") as browser:
+                    assert (await browser.get("/dev/bank")).json()["ok"] is False
+    asyncio.run(go())
+
+
+# ---------------------------------------------------------------- language (Georgian by default)
+
+def test_the_agent_is_told_to_reply_in_georgian_by_default_and_english_on_request(monkeypatch):
+    monkeypatch.delenv("LANGUAGE", raising=False)
+    assert "Always reply in Georgian" in agent.system_prompt()
+    monkeypatch.setenv("LANGUAGE", "en")
+    prompt = agent.system_prompt()
+    assert "Always reply in Georgian" not in prompt and "language the customer writes in" in prompt
+    monkeypatch.setenv("LANGUAGE", "fr")                       # something we do not support falls back to Georgian
+    assert agent.language() == "ka"
+
+
+def test_the_prompt_always_keeps_numbers_and_links_exact():
+    for lang in ("ka", "en"):
+        assert "copy amounts, currencies, IBANs" in agent.system_prompt(lang)
+
+
+def test_the_chat_page_speaks_georgian_by_default_and_english_on_request(app, tmp_path, monkeypatch):
+    import httpx
+    chat_ui = load_chat_ui()
+
+    async def page_text():
+        async with World(app, tmp_path) as w:
+            async with Client(w.server) as mcp:
+                web = chat_ui.build_app(PretendGemini([]), "x", types.GenerateContentConfig(), mcp)
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=web), base_url="http://ui") as browser:
+                    return (await browser.get("/")).text
+    monkeypatch.delenv("LANGUAGE", raising=False)
+    georgian = asyncio.run(page_text())
+    assert 'const LANG = ("ka" === "en")' in georgian and "გადახდების ასისტენტი" in georgian
+    assert 'id="bankframe"' in georgian                        # the bank panel inside the page
+    monkeypatch.setenv("LANGUAGE", "en")
+    assert 'const LANG = ("en" === "en")' in asyncio.run(page_text())

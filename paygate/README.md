@@ -31,18 +31,24 @@ after they approve something.
 
 ### Try it with a chat agent (Gemini)
 
-`examples/gemini_agent.py` is a small chat loop that connects Gemini to the server, so you can talk to
-an agent in the terminal. It prints every tool call and writes `agent_transcript.jsonl`.
+`examples/gemini_agent.py` is a small agent (a loop around Gemini) that uses the tools. It comes in two forms:
 
-```
-uv add google-genai                      # once, from the repository root
-$env:GEMINI_API_KEY = "your key"         # PowerShell
-uv run python examples/gemini_agent.py   # from this folder
-```
+- **Chat page** (easiest): `uv run --env-file .env python examples/chat_ui.py` opens http://127.0.0.1:8002 with the
+  the chat on the whole left side, and on the right the mock bank's own pages (one frame that stays open) with
+  **developer tools** below it: payments by `intent_id`, buttons that make the bank misbehave (lose the next answer, slow, down, stuck pending),
+  and a timeline per customer message (every model call and tool call with its time; the gate's verdict in
+  colour and the rule that fired, for example "duplicate under another intent_id: blocked").
+  Links for the customer appear as buttons that load the bank frame. The right half asks the chat server, which
+  passes on to the bank's admin API (`BANK_URL`, default `http://127.0.0.1:8000`).
+  The repository's `run_all.py` starts the bank, paygate and this page together.
+- **Terminal**: `uv run --env-file .env python examples/gemini_agent.py`
 
-Set `GEMINI_MODEL` to use another model (default `gemini-2.5-flash`). Any model that can call tools
-works the same way, because MCP does not belong to one model maker. The agent is only a loop: read the
-customer, let the model ask for tools, run them on the server, give the results back (see the comments in the file).
+Both need `GEMINI_API_KEY` in a `.env` file (or in the environment). The page and the agent use Georgian by default; set `LANGUAGE=en` for English. Set `GEMINI_MODEL` to use another model (default
+`gemini-2.5-flash`). Any model that can call tools works the same way, because MCP does not belong to one model maker.
+The agent is only a loop: read the customer, let the model ask for tools, run them on the server, give the results back
+(see the comments in the file). Everything is written to `agent_transcript.jsonl`.
+
+The full step-by-step guide for a newcomer is the README in the repository root.
 
 ## 2. The seven tools
 
@@ -112,7 +118,7 @@ still processing), `rejected` (refused, declined or timed out), `cancelled`.
 
 ## 8. Tests
 
-`uv run pytest` (from this folder). 33 tests play three parts at once: the agent (a real MCP client), the
+`uv run pytest` (from this folder). 39 tests play three parts at once: the agent (a real MCP client), the
 customer (signing in on the bank's pages) and the bank (the mock, in the same process, with its faults:
 lost answers, errors, expiry). The tests find the mock in `../mockbank`; set `MOCKBANK_PATH` to use another place.
 
@@ -126,7 +132,8 @@ lost answers, errors, expiry). The tests find the mock in `../mockbank`; set `MO
 | `paygate/state.py` | The memory file (connection and payments) |
 | `paygate/config.py` | Settings and their defaults |
 | `paygate_settings.example.json` | Starting settings to copy and edit |
-| `examples/gemini_agent.py` | A small chat agent (Gemini) that uses the tools |
+| `examples/gemini_agent.py` | The example agent: the loop around Gemini (also runs in the terminal) |
+| `examples/chat_ui.py`, `examples/chat_ui.html` | The chat web page for that agent |
 | `tests/test_paygate.py` | The tests |
 | `tests/test_example_agent.py` | Tests the agent's loop with a pretend model (no key needed) |
 | `tests/conftest.py` | Finds the mock bank and gives each test a clean one |

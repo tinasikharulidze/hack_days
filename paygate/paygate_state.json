@@ -1,0 +1,14 @@
+{
+  "connection": {
+    "status": "connected",
+    "ibans": [
+      "GE94MB0000000000000001"
+    ],
+    "consent_id": "1f3eb905-0196-4576-b686-0a193caf1ead",
+    "link": "http://127.0.0.1:8000/bank/approve/b155b34f-2811-4c9b-b805-7604ea4286f8",
+    "created_at": "2026-11-27T15:09:21.925838+00:00",
+    "access_token": "WbclHVHWXzEPXvoCuR-2te3FI3mMRjFg",
+    "refresh_token": "pSW0wpk-a0OA7yPfYI2EDmEg-9KwnU0u"
+  },
+  "payments": {}
+}

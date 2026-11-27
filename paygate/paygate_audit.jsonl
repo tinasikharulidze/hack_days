@@ -1,0 +1,26 @@
+{"time": "2026-11-27T11:03:21.908654+00:00", "tool": "connect_bank", "arguments": {"ibans": ["GE94MB0000000000000001"]}, "status": "waiting_for_customer"}
+{"time": "2026-11-27T11:04:30.527962+00:00", "tool": "connect_bank", "arguments": {"ibans": ["GE94MB0000000000000001"]}, "status": "connected"}
+{"time": "2026-11-27T11:04:37.941044+00:00", "tool": "list_accounts", "arguments": {}, "status": "ok"}
+{"time": "2026-11-27T11:09:50.806478+00:00", "tool": "list_accounts", "arguments": {}, "status": "ok"}
+{"time": "2026-11-27T11:09:52.095458+00:00", "tool": "get_balances", "arguments": {"account_id": "a1"}, "status": "ok"}
+{"time": "2026-11-27T11:10:58.203926+00:00", "tool": "make_payment", "arguments": {"intent_id": "order-1-payment", "from_iban": "GE94MB0000000000000001", "to_iban": "GE98MB0000111122223333", "to_name": "Example Shop", "amount": "25.50", "reference": "Order 1", "currency": "GEL"}, "status": "awaiting_customer"}
+{"time": "2026-11-27T11:11:27.682734+00:00", "tool": "payment_status", "arguments": {"intent_id": "order-1-payment"}, "status": "completed"}
+{"time": "2026-11-27T11:11:51.011371+00:00", "tool": "make_payment", "arguments": {"intent_id": "order-2-payment", "from_iban": "GE94MB0000000000000001", "to_iban": "GE98MB0000111122223333", "to_name": "Example Shop", "amount": "10.00", "reference": "Order 2", "currency": "GEL"}, "status": "awaiting_customer"}
+{"time": "2026-11-27T11:12:16.651096+00:00", "tool": "payment_status", "arguments": {"intent_id": "order-2-payment"}, "status": "completed"}
+{"time": "2026-11-27T11:13:14.665593+00:00", "tool": "make_payment", "arguments": {"intent_id": "order-3-payment", "from_iban": "GE94MB0000000000000001", "to_iban": "GE98MB0000111122223333", "to_name": "Example Shop", "amount": "30.00", "reference": "Order 3", "currency": "GEL"}, "status": "unknown"}
+{"time": "2026-11-27T11:13:16.800587+00:00", "tool": "make_payment", "arguments": {"intent_id": "order-3-payment", "from_iban": "GE94MB0000000000000001", "to_iban": "GE98MB0000111122223333", "to_name": "Example Shop", "amount": "30.00", "reference": "Order 3", "currency": "GEL"}, "status": "awaiting_customer"}
+{"time": "2026-11-27T11:14:02.264433+00:00", "tool": "payment_status", "arguments": {"intent_id": "order-3-payment"}, "status": "completed"}
+{"time": "2026-11-27T11:14:51.260083+00:00", "tool": "payment_status", "arguments": {"intent_id": "order-1-payment"}, "status": "completed"}
+{"time": "2026-11-27T11:33:24.643034+00:00", "tool": "connect_bank", "arguments": {"ibans": ["GE94MB0000000000000001"]}, "status": "waiting_for_customer"}
+{"time": "2026-11-27T11:34:51.041978+00:00", "tool": "connect_bank", "arguments": {"ibans": ["GE94MB0000000000000001"]}, "status": "connected"}
+{"time": "2026-11-27T11:34:52.219154+00:00", "tool": "list_accounts", "arguments": {}, "status": "ok"}
+{"time": "2026-11-27T11:35:06.119956+00:00", "tool": "get_balances", "arguments": {"account_id": "a1"}, "status": "ok"}
+{"time": "2026-11-27T11:43:52.635664+00:00", "tool": "connect_bank", "arguments": {"ibans": ["GE94MB0000000000000001"]}, "status": "waiting_for_customer"}
+{"time": "2026-11-27T11:44:25.513418+00:00", "tool": "connect_bank", "arguments": {"ibans": ["GE94MB0000000000000001"]}, "status": "connected"}
+{"time": "2026-11-27T11:44:26.940351+00:00", "tool": "list_accounts", "arguments": {}, "status": "ok"}
+{"time": "2026-11-27T11:44:27.908830+00:00", "tool": "get_balances", "arguments": {"account_id": "a1"}, "status": "ok"}
+{"time": "2026-11-27T11:44:56.955770+00:00", "tool": "make_payment", "arguments": {"intent_id": "payment-order-1", "from_iban": "GE94MB0000000000000001", "to_iban": "GE98MB0000111122223333", "to_name": "Example Shop", "amount": "25.50", "reference": "Order 1", "currency": "GEL"}, "status": "awaiting_customer"}
+{"time": "2026-11-27T11:45:50.883969+00:00", "tool": "payment_status", "arguments": {"intent_id": "payment-order-1"}, "status": "completed"}
+{"time": "2026-11-27T11:46:06.533009+00:00", "tool": "payment_status", "arguments": {"intent_id": "payment-order-1"}, "status": "completed"}
+{"time": "2026-11-27T11:46:24.308422+00:00", "tool": "make_payment", "arguments": {"intent_id": "payment-big-order", "from_iban": "GE94MB0000000000000001", "to_iban": "GE98MB0000111122223333", "to_name": "Example Shop", "amount": "300.00", "reference": "Big order", "currency": "GEL"}, "status": "refused"}
+{"time": "2026-11-27T15:09:21.932668+00:00", "tool": "connect_bank", "arguments": {"ibans": ["GE94MB0000000000000001"]}, "status": "waiting_for_customer"}

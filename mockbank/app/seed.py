@@ -98,8 +98,8 @@ def build_state() -> State:
 
     customers = {
         # Fake sign-ins for the approval page. Test values only, listed in the README.
-        "c1": Customer(id="c1", name="Nino Beridze", username="nino", password="mock-nino-123"),
-        "c2": Customer(id="c2", name="Giorgi Kapanadze", username="giorgi", password="mock-giorgi-123"),
+        "c1": Customer(id="c1", name="Nino Kezherashvili", username="nino", password="nino"),
+        "c2": Customer(id="c2", name="Luka Darsalia", username="luka", password="luka"),
     }
 
     # (resource_id, customer, currency, account name, product, type, opening balance, transactions)

@@ -295,7 +295,7 @@ def build_server(gate: PayGate, bank: BankClient, config: Config) -> MCPServer:
         return HTMLResponse(
             f"<!doctype html><meta charset=utf-8><title>Done</title>"
             f"<body style='font-family:sans-serif;max-width:30em;margin:4em auto'>"
-            f"<h2>{sentence}</h2><p>You can close this tab.</p></body>"
+            f"<h2>{sentence}</h2></body>"
         )
 
     return server

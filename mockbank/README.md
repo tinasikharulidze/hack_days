@@ -146,8 +146,8 @@ Fake sign-ins (test values, nothing real):
 
 | Customer | Username | Password |
 |---|---|---|
-| Nino Beridze | `nino` | `mock-nino-123` |
-| Giorgi Kapanadze | `giorgi` | `mock-giorgi-123` |
+| Nino Kezherashvili | `nino` | `nino` |
+| Luka Darsalia | `luka` | `luka` |
 
 The same list is at `GET /admin/data`.
 
@@ -438,7 +438,7 @@ time, so tests can rely on them.
 
 | | |
 |---|---|
-| Customers | 2: Nino Beridze, Giorgi Kapanadze |
+| Customers | 2: Nino Kezherashvili, Luka Darsalia |
 | Accounts | 5: 3 in GEL (2 current, 1 savings), 1 in USD, 1 in EUR |
 | Transactions | 70 in total, 8 of them pending |
 | IBANs | Look real: `GE`, two check digits, `MB`, 16 digits. They pass the standard IBAN check. |

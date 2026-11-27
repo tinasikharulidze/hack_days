@@ -50,6 +50,7 @@ _DEAD = {
     "rejected",
     "cancelled",
 }  # these never moved money and do not count against limits
+_BACK = " You can go back to the chat."  # ends the sentences shown on the page the customer returns to
 _NAMESPACE = uuid.UUID(
     "6f1c1c4e-2a53-4f0e-9a43-0c2f7f6a9d11"
 )  # fixed, so one intent always gives one X-Request-ID
@@ -144,11 +145,11 @@ class PayGate:
         connection = self.state.connection
         if consent_id:  # back from the permission page
             if connection.get("consent_id") != consent_id:
-                return "This permission request is not known here."
+                return "This permission request is not known here." + _BACK
             if params.get("error"):
                 self.state.connection = {"status": "denied"}
                 self.state.save()
-                return "You did not give permission. Nothing was shared."
+                return "You did not give permission. Nothing was shared." + _BACK
             try:
                 tokens = await self.bank.exchange_code(params.get("code", ""))
             except BankProblem:
@@ -160,7 +161,7 @@ class PayGate:
                 "refresh_token": tokens["refresh_token"],
             }
             self.state.save()
-            return "Permission given. You can go back to the chat."
+            return "Permission given." + _BACK
         bank_id = params.get("paymentId")
         record = next(
             (
@@ -171,14 +172,14 @@ class PayGate:
             None,
         )
         if record is None:
-            return "You can go back to the chat."
+            return "Done." + _BACK
         await self._refresh(record)  # the redirect is only a nudge; ask the bank
         words = {
             "completed": "Payment approved and sent.",
             "rejected": "The payment did not go through.",
             "pending": "Payment approved. The bank is still processing it.",
         }
-        return words.get(record["state"], "You can go back to the chat.")
+        return words.get(record["state"], "Done.") + _BACK
 
     # =====================================================================
     # Payments
@@ -212,6 +213,7 @@ class PayGate:
         if from_iban not in self.state.connection["ibans"]:
             return {
                 "status": "refused",
+                "rule": "unknown_account",      # which gate rule answered (shown in the chat page's developer tools)
                 "message": "The customer has not given access to that paying account.",
                 "next_step": "Use one of the accounts from list_accounts.",
             }
@@ -225,6 +227,7 @@ class PayGate:
                 return {
                     "status": "refused",
                     "intent_id": intent_id,
+                    "rule": "intent_reused",
                     "message": "This intent_id was already used for a different payment.",
                     "next_step": "Use a new intent_id for a different payment.",
                 }
@@ -236,6 +239,7 @@ class PayGate:
             return self._answer(
                 record,
                 "A payment for this intent_id already exists. Nothing new was sent.",
+                rule="same_intent",
             )
 
         # Rule 2: same payment under another intent_id (an agent that makes up a new id on each retry).
@@ -253,12 +257,14 @@ class PayGate:
                         f"The same payment already exists under intent_id "
                         f"'{other['intent_id']}'. Nothing new was sent. If you really want a "
                         f"second identical payment, change the reference.",
+                        rule="same_payment_other_intent",
                     )
 
         # Rule 3: limits.
         if Decimal(amount) > Decimal(self.config.max_payment_gel):
             return {
                 "status": "refused",
+                "rule": "max_payment",
                 "message": f"A single payment may not exceed "
                 f"{self.config.max_payment_gel} GEL.",
                 "next_step": "Ask the customer or use a smaller amount.",
@@ -266,6 +272,7 @@ class PayGate:
         if self._today_total() + Decimal(amount) > Decimal(self.config.max_per_day_gel):
             return {
                 "status": "refused",
+                "rule": "daily_limit",
                 "message": f"This would take today's payments over the daily limit of "
                 f"{self.config.max_per_day_gel} GEL.",
                 "next_step": "Try again tomorrow or ask the customer.",
@@ -426,7 +433,7 @@ class PayGate:
         return True
 
     @staticmethod
-    def _answer(record: dict, message: str = "") -> dict:
+    def _answer(record: dict, message: str = "", rule: str = "") -> dict:
         """What the agent sees for a payment. Always says what to do next."""
         state = record["state"]
         next_step = {
@@ -455,6 +462,8 @@ class PayGate:
             "message": message or meaning.get(state, state),
             "next_step": next_step,
         }
+        if rule:
+            answer["rule"] = rule       # which gate rule produced this answer (for the developer tools)
         if state == "awaiting_customer":
             answer["customer_link"] = record["link"]
         return answer

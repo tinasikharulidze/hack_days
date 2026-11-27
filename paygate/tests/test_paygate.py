@@ -256,6 +256,7 @@ def test_a_made_up_new_intent_id_for_the_same_payment_is_still_caught(app, tmp_p
             await w.pay(intent="order-1")
             again = await w.pay(intent="order-1-retry")           # an agent that invents a new id on each retry
             assert "already exists under intent_id 'order-1'" in again["message"]
+            assert again["rule"] == "same_payment_other_intent"          # the developer tools show which rule fired
             assert len(await w.bank_payments()) == 1
     run(go())
 
