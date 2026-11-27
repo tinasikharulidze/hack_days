@@ -29,6 +29,21 @@ That is all. You write no code against the bank. The agent gets the tools and th
 The same address also serves `/callback`, the page the bank sends the customer's browser back to
 after they approve something.
 
+### Try it with a chat agent (Gemini)
+
+`examples/gemini_agent.py` is a small chat loop that connects Gemini to the server, so you can talk to
+an agent in the terminal. It prints every tool call and writes `agent_transcript.jsonl`.
+
+```
+uv add google-genai                      # once, from the repository root
+$env:GEMINI_API_KEY = "your key"         # PowerShell
+uv run python examples/gemini_agent.py   # from this folder
+```
+
+Set `GEMINI_MODEL` to use another model (default `gemini-2.5-flash`). Any model that can call tools
+works the same way, because MCP does not belong to one model maker. The agent is only a loop: read the
+customer, let the model ask for tools, run them on the server, give the results back (see the comments in the file).
+
 ## 2. The seven tools
 
 | Tool | What it does |
@@ -97,7 +112,7 @@ still processing), `rejected` (refused, declined or timed out), `cancelled`.
 
 ## 8. Tests
 
-`uv run pytest` (from this folder). 30 tests play three parts at once: the agent (a real MCP client), the
+`uv run pytest` (from this folder). 33 tests play three parts at once: the agent (a real MCP client), the
 customer (signing in on the bank's pages) and the bank (the mock, in the same process, with its faults:
 lost answers, errors, expiry). The tests find the mock in `../mockbank`; set `MOCKBANK_PATH` to use another place.
 
@@ -111,5 +126,7 @@ lost answers, errors, expiry). The tests find the mock in `../mockbank`; set `MO
 | `paygate/state.py` | The memory file (connection and payments) |
 | `paygate/config.py` | Settings and their defaults |
 | `paygate_settings.example.json` | Starting settings to copy and edit |
+| `examples/gemini_agent.py` | A small chat agent (Gemini) that uses the tools |
 | `tests/test_paygate.py` | The tests |
+| `tests/test_example_agent.py` | Tests the agent's loop with a pretend model (no key needed) |
 | `tests/conftest.py` | Finds the mock bank and gives each test a clean one |
